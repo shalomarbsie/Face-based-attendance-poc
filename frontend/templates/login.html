@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Office Attendance Login</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <h1>Office Attendance</h1>
+        <p>Owner / HR login</p>
+        <form id="login-form">
+          <label>Email</label>
+          <input name="email" type="email" required autocomplete="username" />
+          <label>Password</label>
+          <input name="password" type="password" required autocomplete="current-password" />
+          <button type="submit">Log in</button>
+        </form>
+        <p id="status" class="status"></p>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script src="/static/login.js"></script>
+  </body>
+</html>

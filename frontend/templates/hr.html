@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HR Management</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/register">Employee Registration</a>
+        <a href="/reports">Reports</a>
+        <button class="danger" onclick="logout()">Log out</button>
+      </nav>
+      <section class="card">
+        <h1>HR Management</h1>
+        <form id="hr-form">
+          <label>Full name</label>
+          <input name="full_name" required />
+          <label>Email</label>
+          <input name="email" type="email" required />
+          <label>Temporary password</label>
+          <input name="password" type="password" required />
+          <button type="submit">Create HR</button>
+        </form>
+        <p id="status" class="status"></p>
+      </section>
+      <section class="card">
+        <h2>Admin Users</h2>
+        <div id="admins"></div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script src="/static/hr.js"></script>
+  </body>
+</html>

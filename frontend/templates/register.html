@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Employee Registration</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/hr">HR Management</a>
+        <a href="/reports">Reports</a>
+        <button class="danger" onclick="logout()">Log out</button>
+      </nav>
+      <section class="grid">
+        <div class="card">
+          <h1>Employee Registration</h1>
+          <video id="video" autoplay muted playsinline></video>
+          <canvas id="canvas" hidden></canvas>
+          <p><span id="sample-count" class="pill">0/5 samples captured</span></p>
+          <button id="capture" type="button">Capture Sample</button>
+          <button id="clear" type="button" class="secondary">Clear Samples</button>
+          <p id="status" class="status"></p>
+        </div>
+        <div class="card">
+          <h2>Employee Details</h2>
+          <form id="employee-form">
+            <label>Full name</label>
+            <input name="full_name" required />
+            <label>Email optional</label>
+            <input name="email" type="email" />
+            <button type="submit">Register Employee</button>
+          </form>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script src="/static/register.js"></script>
+  </body>
+</html>

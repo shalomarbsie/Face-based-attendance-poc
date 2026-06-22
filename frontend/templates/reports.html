@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Attendance Reports</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/hr">HR Management</a>
+        <a href="/register">Employee Registration</a>
+        <button class="danger" onclick="logout()">Log out</button>
+      </nav>
+      <section class="card">
+        <h1>Attendance Reports</h1>
+        <label>Start date</label>
+        <input id="start-date" type="date" />
+        <label>End date</label>
+        <input id="end-date" type="date" />
+        <button id="load" type="button">Load Reports</button>
+        <p id="status" class="status"></p>
+      </section>
+      <section class="card">
+        <h2>Attendance</h2>
+        <div id="attendance"></div>
+      </section>
+      <section class="card">
+        <h2>Audit Events</h2>
+        <div id="audit"></div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script src="/static/reports.js"></script>
+  </body>
+</html>

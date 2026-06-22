@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Camera Attendance</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="card">
+        <h1>Camera Attendance</h1>
+        <p>Configured camera: <span id="camera-name" class="pill">Loading...</span></p>
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas" hidden></canvas>
+        <p id="status" class="status">Starting camera...</p>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script src="/static/camera.js"></script>
+  </body>
+</html>

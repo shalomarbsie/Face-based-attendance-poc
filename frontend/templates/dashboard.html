@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="nav">
+        <a href="/hr">HR Management</a>
+        <a href="/register">Employee Registration</a>
+        <a href="/reports">Reports</a>
+        <a href="/camera" class="secondary">Camera Attendance</a>
+        <button class="danger" onclick="logout()">Log out</button>
+      </nav>
+      <section class="card">
+        <h1>Admin Dashboard</h1>
+        <p id="status" class="status">Use the navigation above to manage users, register employees, and review attendance.</p>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+    <script>requireSession();</script>
+  </body>
+</html>
