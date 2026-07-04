@@ -23,6 +23,9 @@ Pipfile
 Pipfile.lock
 poetry.lock
 
+# Allow for example environment file
+!.env.example
+
 # Ignore logs and system files
 *.log
 *.sqlite3
