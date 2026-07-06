@@ -37,7 +37,7 @@ class StreamSession:
         raw_results = get_face_app().get(frame)
         bboxes = [np.asarray(r["bbox"], dtype=float) for r in raw_results]
 
-        # tage 2: track every frame
+        # Stage 2: track every frame
         active_tracks = self.tracker.update(bboxes)
 
         # Pair each track's current bbox back to a detection index by best IOU,
