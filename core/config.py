@@ -22,6 +22,19 @@ class Settings:
     face_match_threshold: float = 0.5
     duplicate_window_seconds: int = 60
 
+    # Inference thread tuning
+    intra_op_num_threads: int = 4
+    inter_op_num_threads: int = 1
+
+    # Detection resolution (320 for laptop, 640 for production)
+    det_size: int = 320
+
+    # Streaming pipeline tuning
+    stream_executor_workers: int = 2
+    sample_every_n: int = 10
+    max_active_tracks: int = 10
+    target_fps: int = 25
+    log_frame_timing: bool = False
 
 def _empty_to_none(value: str | None) -> str | None:
     if value is None or not value.strip():
@@ -51,6 +64,16 @@ def get_settings() -> Settings:
         bootstrap_out_camera_id=_empty_to_none(os.getenv("BOOTSTRAP_OUT_CAMERA_ID")),
         face_match_threshold=float(os.getenv("FACE_MATCH_THRESHOLD", "0.5")),
         duplicate_window_seconds=int(os.getenv("DUPLICATE_WINDOW_SECONDS", "60")),
+
+        # --- new reads ---
+        det_size=int(os.getenv("DET_SIZE", "320")),
+        intra_op_num_threads=int(os.getenv("INTRA_OP_NUM_THREADS", "3")),
+        inter_op_num_threads=int(os.getenv("INTER_OP_NUM_THREADS", "1")),
+        stream_executor_workers=int(os.getenv("STREAM_EXECUTOR_WORKERS", "2")),
+        sample_every_n=int(os.getenv("SAMPLE_EVERY_N", "15")),
+        max_active_tracks=int(os.getenv("MAX_ACTIVE_TRACKS", "3")),
+        target_fps=int(os.getenv("TARGET_FPS", "15")),
+        log_frame_timing=os.getenv("LOG_FRAME_TIMING", "0") == "1",
     )
 
 

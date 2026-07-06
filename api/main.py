@@ -1,7 +1,11 @@
+import asyncio
+import time
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+from fastapi import WebSocket, WebSocketDisconnect
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,12 +21,16 @@ from services.auth_service import AuthService
 from services.face_service import FaceService, get_face_app
 from services.report_service import ReportService
 from services.user_service import UserService
+from services.stream_session import StreamSession
 
+_settings = get_settings()
+_inference_executor = ThreadPoolExecutor(max_workers=_settings.stream_executor_workers)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     bootstrap_database()
-    get_face_app()
+    face_app = get_face_app()    # prepare() warms ONNX internally
+    print(f"[startup] model ready — det_size={get_settings().det_size}")
     yield
 
 
@@ -205,6 +213,60 @@ async def camera_detect(image: UploadFile = File(...)):
                     {"event_type": event.event_type, "employee": employee.full_name, "confidence": confidence}
                 )
         return {"events": response_events}
+
+@app.websocket("/ws/camera/{camera_id}/stream")
+async def camera_stream(websocket: WebSocket, camera_id: str):
+    # Validate the camera before accepting — invalid camera_id
+    # gets rejected with 1008 (Policy Violation) before the
+    # handshake completes, so the client sees a clean close.
+    with SessionLocal() as session:
+        camera = CameraRepository(session).get(camera_id)
+        if camera is None or not camera.is_active:
+            await websocket.accept()
+            await websocket.close(code=1008)
+            return
+
+    await websocket.accept()
+
+    stream = StreamSession(camera_id=camera_id)
+
+    # maxsize=1: if a frame is still being processed when the
+    # next one arrives, drop the older frame. Always work on
+    # the freshest data — critical on a 15W mobile chip.
+    frame_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1)
+
+    async def receive_frames():
+        try:
+            while True:
+                data = await websocket.receive_bytes()
+                if frame_queue.full():
+                    try:
+                        frame_queue.get_nowait()   # drop stale frame
+                    except asyncio.QueueEmpty:
+                        pass
+                await frame_queue.put(data)
+        except WebSocketDisconnect:
+            pass
+
+    async def process_frames():
+        loop = asyncio.get_running_loop()
+        try:
+            while True:
+                binary_data = await frame_queue.get()
+                # Offload all blocking CPU work to the thread pool.
+                # The async event loop stays free to keep receiving
+                # frames from the client while inference runs.
+                events = await loop.run_in_executor(
+                    _inference_executor,
+                    stream.process_frame,
+                    binary_data,
+                )
+                if events:
+                    await websocket.send_json({"events": events})
+        except WebSocketDisconnect:
+            pass
+
+    await asyncio.gather(receive_frames(), process_frames())
 
 
 @app.get("/api/reports/attendance")

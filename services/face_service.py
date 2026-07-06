@@ -1,3 +1,5 @@
+import os
+import onnxruntime as ort
 from functools import lru_cache
 
 import cv2
@@ -10,8 +12,23 @@ from db.repositories.embedding_repository import EmbeddingRepository
 
 @lru_cache(maxsize=1)
 def get_face_app() -> FaceAnalysis:
-    app = FaceAnalysis(name="buffalo_sc", root="insightface_model", providers=["CPUExecutionProvider"])
-    app.prepare(ctx_id=0, det_size=(320, 320), det_thresh=0.5)
+    settings = get_settings()
+    
+    os.environ["OMP_NUM_THREADS"] = str(settings.intra_op_num_threads)
+    os.environ["ONNXRUNTIME_NUM_THREADS"] = str(settings.intra_op_num_threads)
+
+
+    app = FaceAnalysis(
+        name="buffalo_sc", 
+        root="insightface_model", 
+        providers=["CPUExecutionProvider"],
+    )
+    
+    app.prepare(
+        ctx_id=0, 
+        det_size=(settings.det_size, settings.det_size), 
+        det_thresh=0.5
+    )
     return app
 
 
