@@ -3,6 +3,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
+import base64, json
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
@@ -180,7 +181,12 @@ def current_camera():
         camera = CameraRepository(session).get(settings.camera_id)
         if camera is None or not camera.is_active:
             raise HTTPException(status_code=404, detail="Configured camera not found")
-        return {"id": camera.id, "name": camera.name, "direction": camera.direction}
+        return {
+            "id": camera.id, 
+            "name": camera.name, 
+            "direction": camera.direction,
+            "target_fps": settings.target_fps
+        }
 
 
 @app.post("/api/camera/detect")
@@ -227,24 +233,34 @@ async def camera_stream(websocket: WebSocket, camera_id: str):
             return
 
     await websocket.accept()
-
     stream = StreamSession(camera_id=camera_id)
-
     # maxsize=1: if a frame is still being processed when the
     # next one arrives, drop the older frame. Always work on
     # the freshest data — critical on a 15W mobile chip.
     frame_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1)
+    # Separate queue for offline sync frames — processed sequentially
+    sync_queue: asyncio.Queue[dict] = asyncio.Queue()
 
     async def receive_frames():
         try:
             while True:
-                data = await websocket.receive_bytes()
-                if frame_queue.full():
-                    try:
-                        frame_queue.get_nowait()   # drop stale frame
-                    except asyncio.QueueEmpty:
-                        pass
-                await frame_queue.put(data)
+                message = await websocket.receive()
+
+                if "bytes" in message and message["bytes"]:
+                    data = await websocket.receive_bytes()
+                    if frame_queue.full():
+                        try:
+                            frame_queue.get_nowait()   # drop stale frame
+                        except asyncio.QueueEmpty:
+                            pass
+                    await frame_queue.put(data)
+                elif "text" in message and message["text"]:
+                    # Offline sync frame sent as JSON text
+                    import json
+                    payload = json.loads(message["text"])
+                    if payload.get("type") == "sync":
+                        await sync_queue.put(payload)
+
         except WebSocketDisconnect:
             pass
 
@@ -266,7 +282,34 @@ async def camera_stream(websocket: WebSocket, camera_id: str):
         except WebSocketDisconnect:
             pass
 
-    await asyncio.gather(receive_frames(), process_frames())
+    async def process_sync_frames():
+        """
+        Processes offline frames sequentially, sending ACK after each.
+        Uses the frame's original captured timestamp for attendance events.
+        """
+        loop = asyncio.get_running_loop()
+        try:
+            while True:
+                payload = await sync_queue.get()
+                print(f"[sync] received frame index={payload['index']} ts={payload['timestamp']}")
+                image_bytes = base64.b64decode(payload["image"])
+
+                events = await loop.run_in_executor(
+                    _inference_executor,
+                    stream.process_frame,
+                    image_bytes,
+                )
+                # ACK tells the client this frame was processed — advance to next
+                await websocket.send_json({
+                    "ack": True,
+                    "index": payload["index"],
+                    "events": events,
+                })
+                print(f"[sync] ack sent index={payload['index']}")
+        except WebSocketDisconnect:
+            pass
+
+    await asyncio.gather(receive_frames(), process_frames(), process_sync_frames())
 
 
 @app.get("/api/reports/attendance")
