@@ -34,7 +34,7 @@ class Settings:
     sample_every_n: int = 10
     max_active_tracks: int = 10
     target_fps: int = 25
-    log_frame_timing: int = 1
+    log_frame_timing: bool = False
 
 def _empty_to_none(value: str | None) -> str | None:
     if value is None or not value.strip():
