@@ -18,25 +18,30 @@ def fake_detection(x1=100, y1=100, x2=200, y2=200):
 
 
 def test_empty_frame_returns_no_events():
-    session = StreamSession(camera_id="cam_in")
-    with patch("services.stream_session.get_face_app") as mock_app:
+    with patch("services.stream_session.get_face_app") as mock_app, \
+         patch("services.stream_session.SpoofService"):
+        
+        session = StreamSession(camera_id="cam_in")
+
         mock_app.return_value.get.return_value = []
         result = session.process_frame(blank_jpeg())
     assert result == []
 
 
 def test_attendance_fires_exactly_once_per_track():
-    session = StreamSession(camera_id="cam_in")
-
     emp = MagicMock()
     emp.id = "emp_001"
 
     with patch("services.stream_session.get_face_app") as mock_app, \
+         patch("services.stream_session.SpoofService") as mock_spoof_cls, \
          patch("services.stream_session.SessionLocal"), \
          patch("services.stream_session.FaceService") as mock_fs, \
          patch("services.stream_session.AttendanceService") as mock_att:
 
+        session = StreamSession(camera_id="cam_in")
+
         mock_app.return_value.get.return_value = [fake_detection()]
+        mock_spoof_cls.return_value.is_live.return_value = (True, 0.85)
         mock_fs.return_value.match_embedding.return_value = (emp, 0.91)
         mock_att.return_value.handle_detection.return_value = MagicMock(
             event_type="clock_in"
@@ -51,14 +56,16 @@ def test_attendance_fires_exactly_once_per_track():
 
 
 def test_unknown_face_calls_handle_unknown():
-    session = StreamSession(camera_id="cam_in")
-
     with patch("services.stream_session.get_face_app") as mock_app, \
+         patch("services.stream_session.SpoofService") as mock_spoof_cls, \
          patch("services.stream_session.SessionLocal"), \
          patch("services.stream_session.FaceService") as mock_fs, \
          patch("services.stream_session.AttendanceService") as mock_att:
 
+        session = StreamSession(camera_id="cam_in")
+
         mock_app.return_value.get.return_value = [fake_detection()]
+        mock_spoof_cls.return_value.is_live.return_value = (True, 0.85)
         mock_fs.return_value.match_embedding.return_value = (None, 0.21)
         mock_att.return_value.handle_unknown.return_value = MagicMock(
             event_type="unknown"
@@ -68,3 +75,20 @@ def test_unknown_face_calls_handle_unknown():
             session.process_frame(blank_jpeg())
 
         assert mock_att.return_value.handle_unknown.call_count == 1
+
+def test_spoof_gate_blocks_match_embedding():
+    with patch("services.stream_session.get_face_app") as mock_app, \
+         patch("services.stream_session.SpoofService") as mock_spoof_cls, \
+         patch("services.stream_session.SessionLocal"), \
+         patch("services.stream_session.FaceService") as mock_fs, \
+         patch("services.stream_session.AttendanceService"):
+
+        session = StreamSession(camera_id="cam_in")
+
+        mock_app.return_value.get.return_value = [fake_detection()]
+        mock_spoof_cls.return_value.is_live.return_value = (False, 0.1)
+
+        for _ in range(120):
+            session.process_frame(blank_jpeg())
+
+        assert mock_fs.return_value.match_embedding.call_count == 0

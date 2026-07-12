@@ -53,3 +53,7 @@ pytest_cache/
 *.egg-info/
 dist/
 build/
+
+# Ignore Models (all downloaded automatically on startup)
+anti_spoof_model/
+insightface_model/

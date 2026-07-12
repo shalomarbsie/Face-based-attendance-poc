@@ -23,6 +23,7 @@ from services.face_service import FaceService, get_face_app
 from services.report_service import ReportService
 from services.user_service import UserService
 from services.stream_session import StreamSession
+from services.spoof_service import get_spoof_session
 
 _settings = get_settings()
 _inference_executor = ThreadPoolExecutor(max_workers=_settings.stream_executor_workers)
@@ -30,8 +31,9 @@ _inference_executor = ThreadPoolExecutor(max_workers=_settings.stream_executor_w
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     bootstrap_database()
-    face_app = get_face_app()    # prepare() warms ONNX internally
-    print(f"[startup] model ready — det_size={get_settings().det_size}")
+    get_face_app()          # pre-warms det_2.5g + w600k_r50
+    get_spoof_session()     # pre-warms MiniFASNetV2
+    print(f"[startup] models ready — det_size={_settings.det_size} spoof_threshold={_settings.spoof_threshold}")
     yield
 
 
