@@ -17,7 +17,7 @@ def get_face_app() -> FaceAnalysis:
     os.environ["ONNXRUNTIME_NUM_THREADS"] = str(settings.intra_op_num_threads)
     
     app = FaceAnalysis(
-        name="buffalo_sc", 
+        name="buffalo_m", 
         root="insightface_model", 
         providers=["CPUExecutionProvider"],
     )
