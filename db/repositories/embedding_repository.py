@@ -1,11 +1,12 @@
-from sqlalchemy import select
-
+from sqlalchemy import select, text
+from core.config import get_settings
 from db.models import FaceEmbedding, User
 
 
 class EmbeddingRepository:
     def __init__(self, session):
         self.session = session
+        self.settings = get_settings()
 
     def save(self, user_id: str, embedding: list[float], model_name: str, model_version: str | None = None) -> FaceEmbedding:
         self.session.query(FaceEmbedding).filter(
@@ -24,6 +25,13 @@ class EmbeddingRepository:
         return row
 
     def find_nearest_employee(self, embedding: list[float]) -> tuple[User, float] | None:
+        # Set ef_search for this transaction only.
+        # Controls recall vs speed tradeoff for the HNSW index.
+        self.session.execute(
+            text("SET LOCAL hnsw.ef_search = :ef"),
+            {"ef": self.settings.hnsw_ef_search},
+        )
+        
         distance = FaceEmbedding.embedding.cosine_distance(embedding)
         stmt = (
             select(User, (1 - distance).label("confidence"))
