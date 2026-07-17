@@ -19,7 +19,7 @@ def get_face_app() -> FaceAnalysis:
 
 
     app = FaceAnalysis(
-        name="buffalo_sc", 
+        name="buffalo_m", 
         root="insightface_model", 
         providers=["CPUExecutionProvider"],
     )

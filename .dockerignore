@@ -6,3 +6,4 @@ __pycache__/
 .git/
 .ipynb_checkpoints/
 face_embedding.txt
+insightface_model/models/buffalo_m/
