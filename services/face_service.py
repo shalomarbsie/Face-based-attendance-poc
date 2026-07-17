@@ -22,6 +22,7 @@ def get_face_app() -> FaceAnalysis:
         name="buffalo_m", 
         root="insightface_model", 
         providers=["CPUExecutionProvider"],
+        allowed_modules=["detection", "recognition"],
     )
     
     app.prepare(
