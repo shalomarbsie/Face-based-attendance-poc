@@ -30,6 +30,7 @@ class Settings:
     target_fps: int = 25
     log_frame_timing: int = 1
     spoof_threshold: float = 0.6
+    hnsw_ef_search: int = 40
     
 
 def _empty_to_none(value: str | None) -> str | None:
@@ -69,6 +70,7 @@ def get_settings() -> Settings:
         target_fps=int(os.getenv("TARGET_FPS", "15")),
         log_frame_timing=os.getenv("LOG_FRAME_TIMING", "0") == "1",
         spoof_threshold=float(os.getenv("SPOOF_THRESHOLD", "0.6")),
+        hnsw_ef_search=int(os.getenv("HNSW_EF_SEARCH", "40")),
     )
 
 

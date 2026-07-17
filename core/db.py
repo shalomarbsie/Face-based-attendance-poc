@@ -29,3 +29,18 @@ def init_database() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=engine)
+
+    # Create HNSW index outside the transaction block.
+    # CREATE INDEX cannot run inside a transaction block when using
+    # CONCURRENTLY; we use a plain connection with manual commit here
+    # so the same pattern works safely for both dev and production.
+    # IF NOT EXISTS makes this idempotent — safe to run on every startup.
+    with engine.connect() as conn:
+        conn.execution_options(isolation_level="AUTOCOMMIT")
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS face_embeddings_embedding_hnsw_idx
+            ON face_embeddings
+            USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64)
+        """))
+        print("[startup] HNSW index on face_embeddings.embedding is ready")
