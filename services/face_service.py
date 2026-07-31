@@ -1,4 +1,5 @@
 import os
+import onnxruntime as ort
 from functools import lru_cache
 
 import cv2
@@ -15,8 +16,6 @@ def get_face_app() -> FaceAnalysis:
     
     os.environ["OMP_NUM_THREADS"] = str(settings.intra_op_num_threads)
     os.environ["ONNXRUNTIME_NUM_THREADS"] = str(settings.intra_op_num_threads)
-    
-    print(f"[debug] OMP_NUM_THREADS={os.environ.get('OMP_NUM_THREADS', 'NOT SET')}")
 
     app = FaceAnalysis(
         name="buffalo_m", 
