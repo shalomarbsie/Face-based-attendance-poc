@@ -1,9 +1,18 @@
-.env
+# Virtual environment — never copy into image
 venv/
+.venv/
+
+# Model files — mounted as volumes at runtime
+insightface_model/
+anti_spoof_model/
+
+# Environment files — injected by docker-compose
+.env.laptop
+.env.production
+
+# Git and dev artifacts
+.git/
 __pycache__/
 *.pyc
 .pytest_cache/
-.git/
-.ipynb_checkpoints/
-face_embedding.txt
-insightface_model/models/buffalo_m/
+tests/

@@ -9,6 +9,11 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance -d attendance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   office-gate-in:
     build: .
@@ -19,7 +24,11 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./insightface_model:/app/insightface_model
+      - ./anti_spoof_model:/app/anti_spoof_model
 
   office-gate-out:
     build: .
@@ -30,7 +39,11 @@ services:
     ports:
       - "8001:8000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./insightface_model:/app/insightface_model
+      - ./anti_spoof_model:/app/anti_spoof_model
 
 volumes:
   postgres_data:

@@ -28,8 +28,7 @@ class EmbeddingRepository:
         # Set ef_search for this transaction only.
         # Controls recall vs speed tradeoff for the HNSW index.
         self.session.execute(
-            text("SET LOCAL hnsw.ef_search = :ef"),
-            {"ef": self.settings.hnsw_ef_search},
+            text(f"SET LOCAL hnsw.ef_search = {self.settings.hnsw_ef_search}")
         )
         
         distance = FaceEmbedding.embedding.cosine_distance(embedding)
