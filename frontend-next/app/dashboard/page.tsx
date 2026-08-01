@@ -6,8 +6,6 @@ import { LiveFeed } from "@/components/LiveFeed";
 import { PresencePanel } from "@/components/PresencePanel";
 import { Users, UserCheck, AlertTriangle, Copy, Wifi, WifiOff } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 interface Stats {
   totalToday: number;
   clockedIn: number;
@@ -85,10 +83,10 @@ export default function DashboardPage() {
         // Get today's attendance
         const today = new Date().toISOString().slice(0, 10);
         const [attendRes, auditRes] = await Promise.all([
-          fetch(`${API_BASE}/api/reports/attendance?start_date=${today}&end_date=${today}`, {
+          fetch(`/api/reports/attendance?start_date=${today}&end_date=${today}`, {
             credentials: "include",
           }),
-          fetch(`${API_BASE}/api/reports/audit-events?limit=500`, {
+          fetch(`/api/reports/audit-events?limit=500`, {
             credentials: "include",
           }),
         ]);
@@ -127,7 +125,7 @@ export default function DashboardPage() {
 
     async function fetchCameras() {
       try {
-        const res = await fetch(`${API_BASE}/api/camera/current`, { credentials: "include" });
+        const res = await fetch(`/api/camera/current`, { credentials: "include" });
         if (res.ok) {
           const cam = await res.json();
           setCameras([{ id: cam.id, name: cam.name, direction: cam.direction, online: true }]);

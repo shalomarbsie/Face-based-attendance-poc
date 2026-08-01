@@ -6,8 +6,8 @@ import { EventBadge } from "@/components/EventBadge";
 import { Camera, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import type { EventType } from "@/lib/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const WS_BASE = API_BASE.replace(/^http/, "ws");
+const API_BASE = "";
+const WS_BASE = typeof window !== "undefined" ? window.location.origin.replace(/^http/, "ws") : "";
 
 interface DetectionResult {
   event_type: EventType;
@@ -40,7 +40,7 @@ export default function CameraPage() {
 
   // Fetch camera config
   useEffect(() => {
-    fetch(`${API_BASE}/api/camera/current`, { credentials: "include" })
+    fetch(`/api/camera/current`, { credentials: "include" })
       .then((r) => r.json())
       .then((cam) => {
         setCameraId(cam.id);

@@ -15,10 +15,6 @@ interface FeedEvent {
   confidence?: number | null;
 }
 
-// Simulate realistic polling against the audit-events endpoint
-// In production this would be WebSocket-driven
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 function formatTime(d: Date) {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
@@ -54,7 +50,7 @@ export function LiveFeed({ maxItems = 60 }: Props) {
     async function poll() {
       if (pausedRef.current) return;
       try {
-        const res = await fetch(`${API_BASE}/api/reports/audit-events?limit=50`, {
+        const res = await fetch(`/api/reports/audit-events?limit=50`, {
           credentials: "include",
         });
         if (!res.ok) return;
@@ -161,7 +157,7 @@ export function LiveFeed({ maxItems = 60 }: Props) {
           <div className="divide-y divide-border">
             {filtered.map((ev, i) => (
               <div
-                key={ev.id}
+                key={ev.id ?? `${ev.timestamp.getTime()}-${i}`}
                 className={`flex items-start gap-3 px-4 py-3 transition-colors ${
                   i === 0 && !paused ? "bg-foreground/[0.03]" : "hover:bg-foreground/[0.02]"
                 }`}

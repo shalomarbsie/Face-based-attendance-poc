@@ -81,7 +81,7 @@ export default function ReportsPage() {
   }, [fetchData]);
 
   const filteredAttendance = attendance.filter((r) =>
-    r.full_name.toLowerCase().includes(search.toLowerCase()),
+    (r.full_name ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const filteredAudit = audit.filter((r) => {

@@ -9,8 +9,6 @@ interface PresentEmployee {
   clock_in_at: string | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 function timeAgo(isoString: string | null): string {
   if (!isoString) return "";
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -30,7 +28,7 @@ export function PresencePanel() {
   useEffect(() => {
     async function fetchPresence() {
       try {
-        const res = await fetch(`${API_BASE}/api/reports/attendance`, {
+        const res = await fetch(`/api/reports/attendance`, {
           credentials: "include",
         });
         if (!res.ok) return;
