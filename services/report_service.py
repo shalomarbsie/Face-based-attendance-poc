@@ -34,12 +34,13 @@ class ReportService:
         for event, employee_name, camera_name in rows:
             data.append(
                 {
-                    "Time": event.recognized_at,
-                    "Event": event.event_type,
-                    "Employee": employee_name or "Unknown",
-                    "Camera": camera_name,
-                    "Confidence": event.confidence,
-                    "Notes": event.notes,
+                    "id": event.id,
+                    "event_type": event.event_type,
+                    "recognized_at": event.recognized_at,
+                    "confidence": event.confidence,
+                    "notes": event.notes,
+                    "full_name": employee_name or "Unknown",
+                    "camera_name": camera_name,
                 }
             )
         return pd.DataFrame(data)

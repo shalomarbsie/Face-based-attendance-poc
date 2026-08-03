@@ -1,14 +1,14 @@
 import asyncio
-import time
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
-import base64, json
+import base64
+from pathlib import Path
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.auth import AUTH_COOKIE, create_session_token, require_roles
@@ -27,6 +27,17 @@ from services.spoof_service import get_spoof_session
 
 _settings = get_settings()
 _inference_executor = ThreadPoolExecutor(max_workers=_settings.stream_executor_workers)
+_project_root = Path(__file__).resolve().parent.parent
+_frontend_export_dir = _project_root / "frontend-next" / "out"
+_legacy_frontend_dir = _project_root / "frontend" / "templates"
+_frontend_page_map = {
+    "login.html": "index",
+    "dashboard.html": "dashboard",
+    "hr.html": "hr",
+    "register.html": "register",
+    "reports.html": "reports",
+    "camera.html": "camera",
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,7 +62,17 @@ def dataframe_records(df):
 
 
 def html_page(name: str) -> HTMLResponse:
-    with open(f"frontend/templates/{name}", encoding="utf-8") as file:
+    if _frontend_export_dir.is_dir():
+        page_name = _frontend_page_map.get(name, name.removesuffix(".html"))
+        candidate_paths = [
+            _frontend_export_dir / page_name / "index.html",
+            _frontend_export_dir / f"{page_name}.html",
+        ]
+        for candidate_path in candidate_paths:
+            if candidate_path.is_file():
+                return HTMLResponse(candidate_path.read_text(encoding="utf-8"))
+
+    with open(_legacy_frontend_dir / name, encoding="utf-8") as file:
         return HTMLResponse(file.read())
 
 
@@ -242,10 +263,11 @@ async def camera_stream(websocket: WebSocket, camera_id: str):
     frame_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1)
     # Separate queue for offline sync frames — processed sequentially
     sync_queue: asyncio.Queue[dict] = asyncio.Queue()
+    stop_event = asyncio.Event()   # ← shared signal
 
     async def receive_frames():
         try:
-            while True:
+            while not stop_event.is_set():
                 message = await websocket.receive()
 
                 if "bytes" in message and message["bytes"]:
@@ -263,8 +285,10 @@ async def camera_stream(websocket: WebSocket, camera_id: str):
                     if payload.get("type") == "sync":
                         await sync_queue.put(payload)
 
-        except WebSocketDisconnect:
+        except (WebSocketDisconnect, RuntimeError):
             pass
+        finally:
+            stop_event.set()   # ← signal all other coroutines to stop
 
     async def process_frames():
         loop = asyncio.get_running_loop()
@@ -291,25 +315,30 @@ async def camera_stream(websocket: WebSocket, camera_id: str):
         """
         loop = asyncio.get_running_loop()
         try:
-            while True:
-                payload = await sync_queue.get()
-                print(f"[sync] received frame index={payload['index']} ts={payload['timestamp']}")
+            while not stop_event.is_set():
+                try:
+                    payload = await asyncio.wait_for(
+                        sync_queue.get(), timeout=1.0
+                    )
+                except asyncio.TimeoutError:
+                    continue
                 image_bytes = base64.b64decode(payload["image"])
-
                 events = await loop.run_in_executor(
                     _inference_executor,
                     stream.process_frame,
                     image_bytes,
                 )
+                if not stop_event.is_set():
                 # ACK tells the client this frame was processed — advance to next
-                await websocket.send_json({
-                    "ack": True,
-                    "index": payload["index"],
-                    "events": events,
-                })
-                print(f"[sync] ack sent index={payload['index']}")
-        except WebSocketDisconnect:
+                    await websocket.send_json({
+                        "ack": True,
+                        "index": payload["index"],
+                        "events": events,
+                    })
+        except (WebSocketDisconnect, RuntimeError):
             pass
+        finally:
+            stop_event.set()
 
     await asyncio.gather(receive_frames(), process_frames(), process_sync_frames())
 
@@ -334,3 +363,7 @@ def audit_events(limit: int = 200, user=Depends(require_roles("owner", "hr"))):
     with SessionLocal() as session:
         df = ReportService(session).audit_events(limit)
         return dataframe_records(df)
+
+
+if _frontend_export_dir.is_dir():
+    app.mount("/", StaticFiles(directory=_frontend_export_dir, html=True), name="frontend")

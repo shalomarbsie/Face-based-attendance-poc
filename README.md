@@ -59,14 +59,26 @@ python3.11 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+cd frontend-next
+npm install
+npm run build
+npm run dev
+```
+
+Simultaneously run the backend with
+
+``` bash
+cd ..
 docker compose up -d postgres
 uvicorn api.main:app --reload
 ```
 
+The FastAPI app serves `frontend-next/out` when it exists, so rebuild the Next frontend after making UI changes.
+
 Open:
 
 ```text
-http://localhost:8000
+http://localhost:3000
 ```
 
 Default bootstrap login:
@@ -126,6 +138,7 @@ api/        FastAPI routes, auth cookie helpers, image decode helpers
 core/       config, database initialization, bootstrap, security
 db/         ORM models and repositories
 services/   business logic for auth, users, faces, attendance, reports
-frontend/   plain HTML/CSS/JS frontend
+frontend-next/  exported Next.js frontend served by FastAPI
+frontend/   legacy plain HTML/CSS/JS frontend fallback
 tests/      unit tests
 ```
