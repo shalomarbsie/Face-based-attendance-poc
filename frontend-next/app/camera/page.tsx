@@ -8,7 +8,6 @@ import type { EventType } from "@/lib/types";
 
 const API_BASE = "";
 const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
-console.log("[camera] WS_BASE =", WS_BASE);
 
 interface DetectionResult {
   event_type: EventType;
@@ -27,7 +26,6 @@ export default function CameraPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasConnected = useRef(false);
 
   const [cameraId, setCameraId] = useState<string | null>(null);
   const [cameraName, setCameraName] = useState("Camera");
@@ -75,7 +73,7 @@ export default function CameraPage() {
   // Connect WebSocket and start sending frames
   const connectWS = useCallback(() => {
     if (!cameraId || !streamActive) return;
-    console.log("[camera] connecting WS to", `${WS_BASE}/ws/camera/${cameraId}/stream`);
+
     setWsStatus("connecting");
 
     const ws = new WebSocket(`${WS_BASE}/ws/camera/${cameraId}/stream`);
@@ -141,15 +139,24 @@ export default function CameraPage() {
   // Auto-connect when camera is ready — replace the manual connect button
   useEffect(() => {
     if (!cameraId || !streamActive) return;
-    if (hasConnected.current) return;
-    hasConnected.current = true;
-    console.log("[camera] connecting WS to", `${WS_BASE}/ws/camera/${cameraId}/stream`);
+
+    // Close any existing connection before opening a new one
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     connectWS();
+
     return () => {
-      hasConnected.current = false;
-      disconnectWS();
+      if (frameIntervalRef.current) {
+        clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+      }
+      wsRef.current?.close();
+      wsRef.current = null;
     };
-  }, [cameraId, streamActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cameraId, streamActive, connectWS]);
 
   const eventColor: Record<EventType, string> = {
     clock_in: "var(--clock-in)",

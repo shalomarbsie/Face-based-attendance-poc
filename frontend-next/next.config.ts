@@ -12,11 +12,11 @@ const nextConfig: NextConfig = {
     return [
       { 
         source: "/api/gate-in/:path*",
-        destination: `${GATE_IN_URL}/api/:path*` 
+        destination: `${GATE_IN_URL}/:path*` 
       },
       { 
         source: "/api/gate-out/:path*", 
-        destination: `${GATE_OUT_URL}/api/:path*` 
+        destination: `${GATE_OUT_URL}/:path*` 
       },
       {
         source: "/api/:path*",

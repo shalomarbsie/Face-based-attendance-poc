@@ -11,6 +11,7 @@ class CameraRepository:
         return self.session.get(Camera, camera_id)
 
     def list_active(self) -> list[Camera]:
+        from db.models import Camera
         return self.session.query(Camera).filter(
             Camera.is_active.is_(True)
         ).all()
