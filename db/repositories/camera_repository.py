@@ -11,7 +11,9 @@ class CameraRepository:
         return self.session.get(Camera, camera_id)
 
     def list_active(self) -> list[Camera]:
-        return list(self.session.scalars(select(Camera).where(Camera.is_active.is_(True)).order_by(Camera.name)))
+        return self.session.query(Camera).filter(
+            Camera.is_active.is_(True)
+        ).all()
 
     def upsert(self, camera_id: str, name: str, direction: str, location: str | None = None) -> Camera:
         camera = self.get(camera_id)

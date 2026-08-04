@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const GATE_IN_URL = process.env.NEXT_PUBLIC_GATE_IN_URL ?? "http://localhost:8000";
+const GATE_OUT_URL = process.env.NEXT_PUBLIC_GATE_OUT_URL ?? "http://localhost:8001";
 
 const nextConfig: NextConfig = {
   turbopack: {
@@ -8,6 +10,14 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
+      { 
+        source: "/api/gate-in/:path*",
+        destination: `${GATE_IN_URL}/api/:path*` 
+      },
+      { 
+        source: "/api/gate-out/:path*", 
+        destination: `${GATE_OUT_URL}/api/:path*` 
+      },
       {
         source: "/api/:path*",
         destination: `${API_URL}/api/:path*`,

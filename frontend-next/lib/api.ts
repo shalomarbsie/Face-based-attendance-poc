@@ -106,3 +106,34 @@ export function registerEmployee(full_name: string, email: string, images: File[
     body,
   });
 }
+
+// --- Cameras ---
+export function listCameras() {
+  return request<Array<{ id: string; name: string; direction: string }>>(
+    "/api/cameras"
+  );
+}
+
+// --- Audit event edit ---
+export function updateAuditEvent(
+  id: string,
+  fields: { event_type?: string; notes?: string; recognized_at?: string }
+) {
+  const body = new URLSearchParams();
+  if (fields.event_type) body.set("event_type", fields.event_type);
+  if (fields.notes !== undefined) body.set("notes", fields.notes);
+  if (fields.recognized_at) body.set("recognized_at", fields.recognized_at);
+  return request<{ id: string; event_type: string }>(
+    `/api/reports/audit-events/${id}`,
+    { method: "PATCH", body }
+  );
+}
+
+// --- HR status toggle ---
+export function updateHRStatus(userId: string, status: "active" | "inactive") {
+  const body = new URLSearchParams({ status });
+  return request<{ id: string; status: string }>(`/api/hr/${userId}/status`, {
+    method: "PATCH",
+    body,
+  });
+}

@@ -7,7 +7,8 @@ import { Camera, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import type { EventType } from "@/lib/types";
 
 const API_BASE = "";
-const WS_BASE = typeof window !== "undefined" ? window.location.origin.replace(/^http/, "ws") : "";
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
+console.log("[camera] WS_BASE =", WS_BASE);
 
 interface DetectionResult {
   event_type: EventType;
@@ -26,6 +27,7 @@ export default function CameraPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasConnected = useRef(false);
 
   const [cameraId, setCameraId] = useState<string | null>(null);
   const [cameraName, setCameraName] = useState("Camera");
@@ -73,6 +75,7 @@ export default function CameraPage() {
   // Connect WebSocket and start sending frames
   const connectWS = useCallback(() => {
     if (!cameraId || !streamActive) return;
+    console.log("[camera] connecting WS to", `${WS_BASE}/ws/camera/${cameraId}/stream`);
     setWsStatus("connecting");
 
     const ws = new WebSocket(`${WS_BASE}/ws/camera/${cameraId}/stream`);
@@ -135,12 +138,18 @@ export default function CameraPage() {
     setLastEvent(null);
   }
 
+  // Auto-connect when camera is ready — replace the manual connect button
   useEffect(() => {
+    if (!cameraId || !streamActive) return;
+    if (hasConnected.current) return;
+    hasConnected.current = true;
+    console.log("[camera] connecting WS to", `${WS_BASE}/ws/camera/${cameraId}/stream`);
+    connectWS();
     return () => {
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-      wsRef.current?.close();
+      hasConnected.current = false;
+      disconnectWS();
     };
-  }, []);
+  }, [cameraId, streamActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const eventColor: Record<EventType, string> = {
     clock_in: "var(--clock-in)",
@@ -174,23 +183,6 @@ export default function CameraPage() {
               )}
               <span className="text-xs text-muted-foreground capitalize">{wsStatus}</span>
             </div>
-
-            {wsStatus === "connected" ? (
-              <button
-                onClick={disconnectWS}
-                className="px-3 py-1.5 bg-[var(--unknown-bg)] text-[var(--unknown)] border border-[var(--unknown)]/20 rounded-md text-xs font-medium hover:opacity-80 transition-opacity"
-              >
-                Stop
-              </button>
-            ) : (
-              <button
-                onClick={connectWS}
-                disabled={!streamActive || !cameraId}
-                className="px-3 py-1.5 bg-foreground text-background rounded-md text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Start Detection
-              </button>
-            )}
           </div>
         </div>
 

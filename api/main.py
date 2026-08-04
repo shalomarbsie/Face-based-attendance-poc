@@ -367,3 +367,12 @@ def audit_events(limit: int = 200, user=Depends(require_roles("owner", "hr"))):
 
 if _frontend_export_dir.is_dir():
     app.mount("/", StaticFiles(directory=_frontend_export_dir, html=True), name="frontend")
+
+@app.get("/api/cameras")
+def list_cameras(user=Depends(require_roles("owner", "hr"))):
+    with SessionLocal() as session:
+        cameras = CameraRepository(session).list_active()
+        return [
+            {"id": c.id, "name": c.name, "direction": c.direction}
+            for c in cameras
+        ]

@@ -3,11 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EventBadge } from "@/components/EventBadge";
-import { Download, ChevronDown, Search } from "lucide-react";
-import { getAttendanceReport, getAuditEvents } from "@/lib/api";
+import { Download, ChevronDown, Search, Pencil, X, Check } from "lucide-react";
+import { getAttendanceReport, getAuditEvents, updateAuditEvent } from "@/lib/api";
 import type { AttendanceRecord, AuditRecord } from "@/lib/types";
 
 type Tab = "attendance" | "audit";
+
+const EVENT_TYPES = ["clock_in", "clock_out", "duplicate", "ignored", "unknown"];
+
+const QUICK_RANGES = [
+  { label: "Today", days: 0 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+];
 
 function formatDuration(hours: number | null): string {
   if (hours == null) return "—";
@@ -32,7 +40,7 @@ function exportCsv(rows: AttendanceRecord[]) {
       (r) =>
         `"${r.full_name}",${r.work_date},${r.clock_in_at ?? ""},${r.clock_out_at ?? ""},${
           r.duration_hours != null ? `${r.duration_hours.toFixed(2)}h` : ""
-        }`,
+        }`
     )
     .join("\n");
   const blob = new Blob([header + body], { type: "text/csv" });
@@ -44,6 +52,14 @@ function exportCsv(rows: AttendanceRecord[]) {
   URL.revokeObjectURL(url);
 }
 
+interface EditState {
+  record: AuditRecord;
+  event_type: string;
+  notes: string;
+  recognized_at: string;
+  saving: boolean;
+}
+
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>("attendance");
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -51,13 +67,22 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Date range defaults: last 7 days
   const today = new Date().toISOString().slice(0, 10);
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(weekAgo);
   const [endDate, setEndDate] = useState(today);
-
   const [auditFilter, setAuditFilter] = useState<string>("all");
+  const [editState, setEditState] = useState<EditState | null>(null);
+
+  function applyQuickRange(days: number) {
+    const end = new Date().toISOString().slice(0, 10);
+    const start =
+      days === 0
+        ? end
+        : new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    setStartDate(start);
+    setEndDate(end);
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -80,13 +105,30 @@ export default function ReportsPage() {
     fetchData();
   }, [fetchData]);
 
+  async function handleSaveEdit() {
+    if (!editState) return;
+    setEditState((s) => s && { ...s, saving: true });
+    try {
+      await updateAuditEvent(editState.record.id, {
+        event_type: editState.event_type,
+        notes: editState.notes,
+        recognized_at: editState.recognized_at,
+      });
+      setEditState(null);
+      fetchData();
+    } catch {
+      setEditState((s) => s && { ...s, saving: false });
+    }
+  }
+
   const filteredAttendance = attendance.filter((r) =>
     (r.full_name ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const filteredAudit = audit.filter((r) => {
     const matchesFilter = auditFilter === "all" || r.event_type === auditFilter;
-    const matchesSearch = !search || (r.full_name ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchesSearch =
+      !search || (r.full_name ?? "").toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -98,7 +140,9 @@ export default function ReportsPage() {
           <div>
             <h1 className="text-lg font-semibold text-foreground tracking-tight">Reports</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Attendance history and audit events
+              {tab === "attendance"
+                ? "Daily attendance records per employee — used for HR and payroll"
+                : "Raw system detection log — every camera event with confidence and notes"}
             </p>
           </div>
           {tab === "attendance" && (
@@ -133,6 +177,18 @@ export default function ReportsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {tab === "attendance" && (
             <>
+              {/* Quick range buttons */}
+              <div className="flex items-center gap-1 bg-secondary border border-border rounded-md p-1">
+                {QUICK_RANGES.map(({ label, days }) => (
+                  <button
+                    key={label}
+                    onClick={() => applyQuickRange(days)}
+                    className="px-2.5 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">From</label>
                 <input
@@ -162,17 +218,16 @@ export default function ReportsPage() {
                 className="appearance-none bg-secondary border border-border rounded-md text-xs text-foreground pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-foreground/20 cursor-pointer"
               >
                 <option value="all">All types</option>
-                <option value="unknown">Unknown</option>
-                <option value="ignored">Ignored</option>
-                <option value="duplicate">Duplicate</option>
                 <option value="clock_in">Clock In</option>
                 <option value="clock_out">Clock Out</option>
+                <option value="duplicate">Duplicate</option>
+                <option value="ignored">Ignored</option>
+                <option value="unknown">Unknown</option>
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
             </div>
           )}
 
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -196,10 +251,7 @@ export default function ReportsPage() {
               <thead>
                 <tr className="border-b border-border">
                   {["Employee", "Date", "Clock In", "Clock Out", "Duration"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                    >
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       {h}
                     </th>
                   ))}
@@ -216,18 +268,10 @@ export default function ReportsPage() {
                   filteredAttendance.map((r, i) => (
                     <tr key={i} className="hover:bg-foreground/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium text-foreground">{r.full_name}</td>
-                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
-                        {r.work_date}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        {formatDateTime(r.clock_in_at)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        {formatDateTime(r.clock_out_at)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {formatDuration(r.duration_hours)}
-                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{r.work_date}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-foreground">{formatDateTime(r.clock_in_at)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-foreground">{formatDateTime(r.clock_out_at)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{formatDuration(r.duration_hours)}</td>
                     </tr>
                   ))
                 )}
@@ -237,11 +281,8 @@ export default function ReportsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  {["Time", "Employee", "Event", "Camera", "Confidence", "Notes"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                    >
+                  {["Time", "Employee", "Event", "Camera", "Confidence", "Notes", ""].map((h, i) => (
+                    <th key={i} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       {h}
                     </th>
                   ))}
@@ -250,7 +291,7 @@ export default function ReportsPage() {
               <tbody className="divide-y divide-border">
                 {filteredAudit.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground text-sm">
+                    <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">
                       No events found
                     </td>
                   </tr>
@@ -259,25 +300,35 @@ export default function ReportsPage() {
                     <tr key={r.id} className="hover:bg-foreground/[0.02] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(r.recognized_at).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
+                          month: "short", day: "numeric",
+                          hour: "2-digit", minute: "2-digit", hour12: false,
                         })}
                       </td>
                       <td className="px-4 py-3 text-foreground">{r.full_name ?? "Unknown"}</td>
-                      <td className="px-4 py-3">
-                        <EventBadge type={r.event_type} />
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {r.camera_name ?? "—"}
-                      </td>
+                      <td className="px-4 py-3"><EventBadge type={r.event_type} /></td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{r.camera_name ?? "—"}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {r.confidence != null ? `${Math.round(r.confidence * 100)}%` : "—"}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[200px] truncate">
+                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px] truncate">
                         {r.notes ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() =>
+                            setEditState({
+                              record: r,
+                              event_type: r.event_type,
+                              notes: r.notes ?? "",
+                              recognized_at: r.recognized_at,
+                              saving: false,
+                            })
+                          }
+                          className="p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Edit event"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -287,6 +338,87 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit dialog */}
+      {editState && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Edit Audit Event</p>
+              <button
+                onClick={() => setEditState(null)}
+                className="p-1 rounded hover:bg-foreground/10 text-muted-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Event Type
+                </label>
+                <div className="relative">
+                  <select
+                    value={editState.event_type}
+                    onChange={(e) => setEditState((s) => s && { ...s, event_type: e.target.value })}
+                    className="w-full appearance-none bg-input border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                  >
+                    {EVENT_TYPES.map((t) => (
+                      <option key={t} value={t}>{t.replace("_", " ")}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Timestamp
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editState.recognized_at.slice(0, 16)}
+                  onChange={(e) =>
+                    setEditState((s) => s && { ...s, recognized_at: e.target.value + ":00Z" })
+                  }
+                  className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={editState.notes}
+                  onChange={(e) => setEditState((s) => s && { ...s, notes: e.target.value })}
+                  placeholder="Optional note…"
+                  className="w-full bg-input border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-foreground/20 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => setEditState(null)}
+                className="px-4 py-2 bg-secondary border border-border rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editState.saving}
+                className="flex items-center gap-1.5 px-4 py-2 bg-foreground text-background rounded-md text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                {editState.saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

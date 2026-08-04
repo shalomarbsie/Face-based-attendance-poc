@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { LiveFeed } from "@/components/LiveFeed";
 import { PresencePanel } from "@/components/PresencePanel";
 import { Users, UserCheck, AlertTriangle, Copy, Wifi, WifiOff } from "lucide-react";
+import { listCameras } from "@/lib/api";
 
 interface Stats {
   totalToday: number;
@@ -124,28 +125,50 @@ export default function DashboardPage() {
     }
 
     async function fetchCameras() {
+      // Ping each gate's health endpoint directly via per-gate rewrite routes.
+      // This is the only reliable way to know if each container is up.
+      const [inResult, outResult] = await Promise.allSettled([
+        fetch("/api/gate-in/health", { credentials: "include" }),
+        fetch("/api/gate-out/health", { credentials: "include" }),
+      ]);
+
+      // Get canonical camera names/IDs from the database
+      let cameraList: Array<{ id: string; name: string; direction: string }> = [];
       try {
-        const res = await fetch(`/api/camera/current`, { credentials: "include" });
-        if (res.ok) {
-          const cam = await res.json();
-          setCameras([{ id: cam.id, name: cam.name, direction: cam.direction, online: true }]);
-        } else {
-          setCameras([
-            { id: "in", name: "Entrance Camera", direction: "in", online: false },
-            { id: "out", name: "Exit Camera", direction: "out", online: false },
-          ]);
-        }
+        cameraList = await listCameras();
       } catch {
-        setCameras([
-          { id: "in", name: "Entrance Camera", direction: "in", online: false },
-          { id: "out", name: "Exit Camera", direction: "out", online: false },
-        ]);
+        // fallback names if DB is unreachable
+        cameraList = [
+          { id: "11111111-1111-1111-1111-111111111111", name: "Office Gate In", direction: "in" },
+          { id: "22222222-2222-2222-2222-222222222222", name: "Office Gate Out", direction: "out" },
+        ];
       }
+
+      const inCam  = cameraList.find((c) => c.direction === "in")
+        ?? { id: "in", name: "Office Gate In", direction: "in" };
+      const outCam = cameraList.find((c) => c.direction === "out")
+        ?? { id: "out", name: "Office Gate Out", direction: "out" };
+
+      setCameras([
+        {
+          ...inCam,
+          online:
+            inResult.status === "fulfilled" && inResult.value.ok,
+        },
+        {
+          ...outCam,
+          online:
+            outResult.status === "fulfilled" && outResult.value.ok,
+        },
+      ]);
     }
 
     fetchStats();
     fetchCameras();
-    const interval = setInterval(fetchStats, 10000);
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchCameras();
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 

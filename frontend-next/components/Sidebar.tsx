@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils";
 import { logout } from "@/lib/api";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/camera", label: "Camera", icon: Camera },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/register", label: "Register Employee", icon: UserPlus },
-  { href: "/hr", label: "HR Management", icon: Users },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "hr"] },
+  { href: "/camera", label: "Camera", icon: Camera, roles: ["owner", "hr"] },
+  { href: "/reports", label: "Reports", icon: FileText, roles: ["owner", "hr"] },
+  { href: "/register", label: "Register Employee", icon: UserPlus, roles: ["owner", "hr"] },
+  { href: "/hr", label: "HR Management", icon: Users, roles: ["owner"] }, // owner only
 ];
 
 interface Props {
@@ -59,7 +59,7 @@ export function Sidebar({ userName, userRole }: Props) {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.filter((item) => !userRole || item.roles.includes(userRole)).map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (
             <Link

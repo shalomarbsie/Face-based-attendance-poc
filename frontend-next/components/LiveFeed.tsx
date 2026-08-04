@@ -37,18 +37,14 @@ interface Props {
 
 export function LiveFeed({ maxItems = 60 }: Props) {
   const [events, setEvents] = useState<FeedEvent[]>([]);
-  const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState<EventType | "all">("all");
   const listRef = useRef<HTMLDivElement>(null);
   const seenIds = useRef<Set<string>>(new Set());
-  const pausedRef = useRef(false);
-  pausedRef.current = paused;
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
     async function poll() {
-      if (pausedRef.current) return;
       try {
         const res = await fetch(`/api/reports/audit-events?limit=50`, {
           credentials: "include",
@@ -95,10 +91,8 @@ export function LiveFeed({ maxItems = 60 }: Props) {
 
   // Auto-scroll to top when not paused
   useEffect(() => {
-    if (!paused && listRef.current) {
-      listRef.current.scrollTop = 0;
-    }
-  }, [events, paused]);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [events]);
 
   const filtered = filter === "all" ? events : events.filter((e) => e.event_type === filter);
 
@@ -115,34 +109,21 @@ export function LiveFeed({ maxItems = 60 }: Props) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
           {/* Filter */}
-          <div className="relative">
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as EventType | "all")}
-              className="appearance-none bg-secondary border border-border rounded text-xs text-foreground pl-2.5 pr-6 py-1 focus:outline-none focus:ring-1 focus:ring-foreground/20 cursor-pointer"
-            >
-              <option value="all">All events</option>
-              <option value="clock_in">Clock In</option>
-              <option value="clock_out">Clock Out</option>
-              <option value="duplicate">Duplicate</option>
-              <option value="ignored">Ignored</option>
-              <option value="unknown">Unknown</option>
-            </select>
-            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-          </div>
-          {/* Pause */}
-          <button
-            onClick={() => setPaused((p) => !p)}
-            className={`text-xs px-2.5 py-1 rounded border transition-colors ${
-              paused
-                ? "bg-[var(--duplicate-bg)] text-[var(--duplicate)] border-[var(--duplicate)]/20"
-                : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-            }`}
+        <div className="relative">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as EventType | "all")}
+            className="appearance-none bg-secondary border border-border rounded text-xs text-foreground pl-2.5 pr-6 py-1 focus:outline-none focus:ring-1 focus:ring-foreground/20 cursor-pointer"
           >
-            {paused ? "Resume" : "Pause"}
-          </button>
+            <option value="all">All events</option>
+            <option value="clock_in">Clock In</option>
+            <option value="clock_out">Clock Out</option>
+            <option value="duplicate">Duplicate</option>
+            <option value="ignored">Ignored</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
         </div>
       </div>
 
@@ -159,7 +140,7 @@ export function LiveFeed({ maxItems = 60 }: Props) {
               <div
                 key={ev.id ?? `${ev.timestamp.getTime()}-${i}`}
                 className={`flex items-start gap-3 px-4 py-3 transition-colors ${
-                  i === 0 && !paused ? "bg-foreground/[0.03]" : "hover:bg-foreground/[0.02]"
+                  i === 0 ? "bg-foreground/[0.03]" : "hover:bg-foreground/[0.02]"
                 }`}
               >
                 {/* Time */}

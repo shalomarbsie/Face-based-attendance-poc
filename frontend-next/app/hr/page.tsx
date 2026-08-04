@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { UserPlus, CheckCircle, AlertCircle, Shield } from "lucide-react";
-import { listAdmins, createHR } from "@/lib/api";
+import { UserPlus, CheckCircle, AlertCircle, Shield, ToggleLeft, ToggleRight } from "lucide-react";
+import { listAdmins, createHR, updateHRStatus } from "@/lib/api";
 import type { HRUser } from "@/lib/types";
 
 export default function HRPage() {
@@ -53,6 +53,16 @@ export default function HRPage() {
       });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function toggleStatus(userId: string, currentStatus: string) {
+    const newStatus = currentStatus === "active" ? "inactive" : "active";
+    try {
+      await updateHRStatus(userId, newStatus);
+      fetchUsers();
+    } catch {
+      // ignore
     }
   }
 
@@ -205,7 +215,7 @@ export default function HRPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  {["User", "Email", "Role", "Status"].map((h) => (
+                  {["User", "Email", "Role", "Status", ""].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
@@ -240,6 +250,21 @@ export default function HRPage() {
                       >
                         {u.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.role !== "owner" && (
+                        <button
+                          onClick={() => toggleStatus(u.id, u.status)}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          title={u.status === "active" ? "Deactivate" : "Activate"}
+                        >
+                          {u.status === "active" ? (
+                            <ToggleRight className="w-5 h-5 text-[var(--clock-in)]" />
+                          ) : (
+                            <ToggleLeft className="w-5 h-5 text-muted-foreground" />
+                          )}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
