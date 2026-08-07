@@ -376,3 +376,137 @@ def list_cameras(user=Depends(require_roles("owner", "hr"))):
             {"id": c.id, "name": c.name, "direction": c.direction}
             for c in cameras
         ]
+
+# --- Audit event: update ---
+@app.patch("/api/reports/audit-events/{event_id}")
+async def update_audit_event(
+    event_id: str,
+    event_type: str = Form(None),
+    notes: str = Form(None),
+    recognized_at: str = Form(None),
+    user=Depends(require_roles("owner", "hr")),
+):
+    with SessionLocal() as session:
+        from db.models import AttendanceEvent, AttendanceSession
+        from datetime import datetime, timezone
+
+        event = session.query(AttendanceEvent).filter(
+            AttendanceEvent.id == event_id
+        ).first()
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+
+        old_type = event.event_type
+        new_type = event_type if event_type is not None else old_type
+
+        # Parse new timestamp if provided
+        new_dt = None
+        if recognized_at is not None:
+            try:
+                dt = datetime.fromisoformat(recognized_at.replace("Z", "+00:00"))
+                new_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid datetime format")
+
+        # Apply event field updates
+        if event_type is not None:
+            event.event_type = event_type
+        if notes is not None:
+            event.notes = notes
+        if new_dt is not None:
+            event.recognized_at = new_dt
+
+        # ── Sync attendance session ───────────────────────────────────────────
+        # Only relevant when the event belongs to a known employee
+        if event.employee_id:
+            effective_dt = new_dt if new_dt is not None else event.recognized_at
+
+            # Case 1: event is linked to a session directly via session_id
+            linked_session = None
+            if event.session_id:
+                linked_session = session.query(AttendanceSession).filter(
+                    AttendanceSession.id == event.session_id
+                ).first()
+
+            # Case 2: no session_id yet — find the employee's current open session
+            if linked_session is None and new_type == "clock_out" and old_type != "clock_out":
+                linked_session = session.query(AttendanceSession).filter(
+                    AttendanceSession.employee_id == event.employee_id,
+                    AttendanceSession.status == "clocked_in",
+                ).first()
+                if linked_session:
+                    # Bind the event to this session now that we know which one
+                    event.session_id = linked_session.id
+
+            if linked_session:
+                if old_type != "clock_out" and new_type == "clock_out":
+                    # Close the session
+                    linked_session.clock_out_at = effective_dt
+                    linked_session.clock_out_camera_id = event.camera_id
+                    linked_session.status = "clocked_out"
+
+                elif old_type == "clock_out" and new_type != "clock_out":
+                    # Reopen the session — undo the clock-out
+                    linked_session.clock_out_at = None
+                    linked_session.clock_out_camera_id = None
+                    linked_session.status = "clocked_in"
+
+                elif old_type == "clock_out" and new_type == "clock_out" and new_dt is not None:
+                    # Just update the timestamp on an existing clock-out
+                    linked_session.clock_out_at = new_dt
+
+        session.commit()
+        session.refresh(event)
+        return {"id": event.id, "event_type": event.event_type}
+
+
+# --- Audit event: delete ---
+@app.delete("/api/reports/audit-events/{event_id}")
+async def delete_audit_event(
+    event_id: str,
+    user=Depends(require_roles("owner", "hr")),
+):
+    with SessionLocal() as session:
+        from db.models import AttendanceEvent
+        event = session.query(AttendanceEvent).filter(
+            AttendanceEvent.id == event_id
+        ).first()
+        if event is None:
+            raise HTTPException(status_code=404, detail="Event not found")
+        session.delete(event)
+        session.commit()
+        return {"ok": True}
+
+
+# --- Audit event: create manual entry ---
+@app.post("/api/reports/audit-events")
+async def create_audit_event(
+    employee_id: str = Form(None),
+    camera_id: str = Form(...),
+    event_type: str = Form(...),
+    recognized_at: str = Form(...),
+    notes: str = Form(None),
+    user=Depends(require_roles("owner", "hr")),
+):
+    with SessionLocal() as session:
+        from db.models import AttendanceEvent
+        from datetime import datetime, timezone
+        import uuid
+        try:
+            dt = datetime.fromisoformat(recognized_at.replace("Z", "+00:00"))
+            dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid datetime format")
+        event = AttendanceEvent(
+            id=str(uuid.uuid4()),
+            employee_id=employee_id or None,
+            camera_id=camera_id,
+            event_type=event_type,
+            recognized_at=dt_utc,
+            notes=notes or None,
+            confidence=None,
+        )
+        session.add(event)
+        session.commit()
+        session.refresh(event)
+        return {"id": event.id, "event_type": event.event_type}

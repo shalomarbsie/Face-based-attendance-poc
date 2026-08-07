@@ -114,18 +114,46 @@ export function listCameras() {
   );
 }
 
-// --- Audit event edit ---
+// --- Audit event: update ---
 export function updateAuditEvent(
   id: string,
   fields: { event_type?: string; notes?: string; recognized_at?: string }
 ) {
   const body = new URLSearchParams();
-  if (fields.event_type) body.set("event_type", fields.event_type);
+  if (fields.event_type !== undefined) body.set("event_type", fields.event_type);
   if (fields.notes !== undefined) body.set("notes", fields.notes);
-  if (fields.recognized_at) body.set("recognized_at", fields.recognized_at);
+  if (fields.recognized_at !== undefined) body.set("recognized_at", fields.recognized_at);
   return request<{ id: string; event_type: string }>(
     `/api/reports/audit-events/${id}`,
     { method: "PATCH", body }
+  );
+}
+
+// --- Audit event: delete ---
+export function deleteAuditEvent(id: string) {
+  return request<{ ok: boolean }>(
+    `/api/reports/audit-events/${id}`,
+    { method: "DELETE" }
+  );
+}
+
+// --- Audit event: create ---
+export function createAuditEvent(fields: {
+  employee_id?: string;
+  camera_id: string;
+  event_type: string;
+  recognized_at: string;
+  notes?: string;
+}) {
+  const body = new URLSearchParams();
+  if (fields.employee_id) body.set("employee_id", fields.employee_id);
+  body.set("camera_id", fields.camera_id);
+  body.set("event_type", fields.event_type);
+  body.set("recognized_at", fields.recognized_at);
+  if (fields.notes) body.set("notes", fields.notes);
+  return request<{ id: string; event_type: string }>(
+    "/api/reports/audit-events",
+    { method: "POST", body }
   );
 }
 
