@@ -355,6 +355,15 @@ def attendance_report(
         start_date = end_date - timedelta(days=7)
     with SessionLocal() as session:
         df = ReportService(session).attendance_report(start_date, end_date)
+        # Rename to match what the frontend expects
+        df = df.rename(columns={
+            "Date":      "work_date",
+            "Employee":  "full_name",
+            "Clock In":  "clock_in_at",
+            "Clock Out": "clock_out_at",
+            "Duration":  "duration_hours",
+            "Status":    "status",
+        })
         return dataframe_records(df)
 
 
@@ -396,10 +405,13 @@ async def update_audit_event(
         if event is None:
             raise HTTPException(status_code=404, detail="Event not found")
 
+        print(f"[patch] event_id={event_id}")
+        print(f"[patch] old_type={event.event_type} new_type={event_type}")
+        print(f"[patch] employee_id={event.employee_id} session_id={event.session_id}")
+
         old_type = event.event_type
         new_type = event_type if event_type is not None else old_type
 
-        # Parse new timestamp if provided
         new_dt = None
         if recognized_at is not None:
             try:
@@ -408,7 +420,6 @@ async def update_audit_event(
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid datetime format")
 
-        # Apply event field updates
         if event_type is not None:
             event.event_type = event_type
         if notes is not None:
@@ -416,44 +427,40 @@ async def update_audit_event(
         if new_dt is not None:
             event.recognized_at = new_dt
 
-        # ── Sync attendance session ───────────────────────────────────────────
-        # Only relevant when the event belongs to a known employee
         if event.employee_id:
             effective_dt = new_dt if new_dt is not None else event.recognized_at
-
-            # Case 1: event is linked to a session directly via session_id
             linked_session = None
+
             if event.session_id:
                 linked_session = session.query(AttendanceSession).filter(
                     AttendanceSession.id == event.session_id
                 ).first()
+                print(f"[patch] found linked_session via session_id: {linked_session}")
 
-            # Case 2: no session_id yet — find the employee's current open session
             if linked_session is None and new_type == "clock_out" and old_type != "clock_out":
                 linked_session = session.query(AttendanceSession).filter(
                     AttendanceSession.employee_id == event.employee_id,
                     AttendanceSession.status == "clocked_in",
                 ).first()
+                print(f"[patch] found linked_session via open query: {linked_session}")
                 if linked_session:
-                    # Bind the event to this session now that we know which one
                     event.session_id = linked_session.id
 
             if linked_session:
+                print(f"[patch] session status before={linked_session.status}")
                 if old_type != "clock_out" and new_type == "clock_out":
-                    # Close the session
                     linked_session.clock_out_at = effective_dt
                     linked_session.clock_out_camera_id = event.camera_id
                     linked_session.status = "clocked_out"
-
                 elif old_type == "clock_out" and new_type != "clock_out":
-                    # Reopen the session — undo the clock-out
                     linked_session.clock_out_at = None
                     linked_session.clock_out_camera_id = None
                     linked_session.status = "clocked_in"
-
                 elif old_type == "clock_out" and new_type == "clock_out" and new_dt is not None:
-                    # Just update the timestamp on an existing clock-out
                     linked_session.clock_out_at = new_dt
+                print(f"[patch] session status after={linked_session.status}")
+            else:
+                print(f"[patch] no session found to update")
 
         session.commit()
         session.refresh(event)

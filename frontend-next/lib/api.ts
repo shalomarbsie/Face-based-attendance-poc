@@ -114,7 +114,7 @@ export function listCameras() {
   );
 }
 
-// --- Audit event: update ---
+// --- Audit events ---
 export function updateAuditEvent(
   id: string,
   fields: { event_type?: string; notes?: string; recognized_at?: string }
@@ -125,19 +125,14 @@ export function updateAuditEvent(
   if (fields.recognized_at !== undefined) body.set("recognized_at", fields.recognized_at);
   return request<{ id: string; event_type: string }>(
     `/api/reports/audit-events/${id}`,
-    { method: "PATCH", body }
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    }
   );
 }
 
-// --- Audit event: delete ---
-export function deleteAuditEvent(id: string) {
-  return request<{ ok: boolean }>(
-    `/api/reports/audit-events/${id}`,
-    { method: "DELETE" }
-  );
-}
-
-// --- Audit event: create ---
 export function createAuditEvent(fields: {
   employee_id?: string;
   camera_id: string;
@@ -153,7 +148,18 @@ export function createAuditEvent(fields: {
   if (fields.notes) body.set("notes", fields.notes);
   return request<{ id: string; event_type: string }>(
     "/api/reports/audit-events",
-    { method: "POST", body }
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    }
+  );
+}
+
+export function deleteAuditEvent(id: string) {
+  return request<{ ok: boolean }>(
+    `/api/reports/audit-events/${id}`,
+    { method: "DELETE" }
   );
 }
 

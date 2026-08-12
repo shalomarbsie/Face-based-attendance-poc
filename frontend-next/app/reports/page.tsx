@@ -151,6 +151,8 @@ export default function ReportsPage() {
 
   async function handleSaveEdit() {
     if (!editState) return;
+    console.log("[edit] handleSaveEdit called, recognized_at =", editState.recognized_at);
+    console.log("[edit] parsed date =", new Date(editState.recognized_at));
     setEditState((s) => s && { ...s, saving: true, error: null });
     try {
       await updateAuditEvent(editState.record.id, {
