@@ -27,10 +27,11 @@ function isoLocal(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function formatDuration(hours: number | null): string {
-  if (hours == null) return "—";
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "Open";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h === 0) return `${m}m`;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
@@ -44,9 +45,7 @@ function formatDateTime(iso: string | null): string {
 function exportAttendanceCsv(rows: AttendanceRecord[]) {
   const header = "Employee,Date,Clock In,Clock Out,Duration\n";
   const body = rows.map((r) =>
-    `"${r.full_name}",${r.work_date},${r.clock_in_at ?? ""},${r.clock_out_at ?? ""},${
-      r.duration_hours != null ? `${r.duration_hours.toFixed(2)}h` : ""
-    }`
+    `"${r.full_name}",${r.work_date},${r.clock_in_at ?? ""},${r.clock_out_at ?? ""},${formatDuration(r.duration_hours)}`
   ).join("\n");
   triggerCsvDownload(header + body, `attendance-${today()}.csv`);
 }

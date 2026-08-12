@@ -22,7 +22,7 @@ class ReportService:
                     "Employee": full_name,
                     "Clock In": clock_in,
                     "Clock Out": clock_out,
-                    "Duration": f"{hours}h {minutes}m" if clock_out else "Open",
+                    "Duration": duration_seconds if clock_out else None,
                     "Status": status,
                 }
             )
