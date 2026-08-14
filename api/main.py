@@ -386,7 +386,6 @@ def list_cameras(user=Depends(require_roles("owner", "hr"))):
             for c in cameras
         ]
 
-# --- Audit event: update ---
 @app.patch("/api/reports/audit-events/{event_id}")
 async def update_audit_event(
     event_id: str,
@@ -467,7 +466,6 @@ async def update_audit_event(
         return {"id": event.id, "event_type": event.event_type}
 
 
-# --- Audit event: delete ---
 @app.delete("/api/reports/audit-events/{event_id}")
 async def delete_audit_event(
     event_id: str,
@@ -485,7 +483,6 @@ async def delete_audit_event(
         return {"ok": True}
 
 
-# --- Audit event: create manual entry ---
 @app.post("/api/reports/audit-events")
 async def create_audit_event(
     employee_id: str = Form(None),
@@ -517,3 +514,23 @@ async def create_audit_event(
         session.commit()
         session.refresh(event)
         return {"id": event.id, "event_type": event.event_type}
+
+@app.patch("/api/hr/{user_id}/status")
+def update_hr_status(
+    user_id: str,
+    status: str = Form(...),
+    actor=Depends(require_roles("owner")),
+):
+    if status not in ("active", "inactive"):
+        raise HTTPException(status_code=400, detail="status must be active or inactive")
+    with SessionLocal() as session:
+        from db.models import User
+        user = session.query(User).filter(
+            User.id == user_id,
+            User.role == "hr"
+        ).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="HR user not found")
+        user.status = status
+        session.commit()
+        return {"id": user.id, "status": user.status}

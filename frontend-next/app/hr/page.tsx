@@ -58,11 +58,13 @@ export default function HRPage() {
 
   async function toggleStatus(userId: string, currentStatus: string) {
     const newStatus = currentStatus === "active" ? "inactive" : "active";
+    console.log("[hr] toggling", userId, "to", newStatus);
     try {
-      await updateHRStatus(userId, newStatus);
+      const result = await updateHRStatus(userId, newStatus);
+      console.log("[hr] result", result);
       fetchUsers();
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("[hr] toggle failed", e);
     }
   }
 

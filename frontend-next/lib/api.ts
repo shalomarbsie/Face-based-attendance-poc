@@ -168,6 +168,7 @@ export function updateHRStatus(userId: string, status: "active" | "inactive") {
   const body = new URLSearchParams({ status });
   return request<{ id: string; status: string }>(`/api/hr/${userId}/status`, {
     method: "PATCH",
-    body,
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
   });
 }

@@ -108,7 +108,7 @@ class CentroidTracker:
             return None
         votes = [v[0] for v in track.vote_buffer]
         top_id, top_count = Counter(votes).most_common(1)[0]
-        if top_count / len(votes) < 0.6:
+        if top_count / len(votes) < 0.5:
             return None
         confidences = [v[1] for v in track.vote_buffer if v[0] == top_id]
         return top_id, float(np.mean(confidences))
