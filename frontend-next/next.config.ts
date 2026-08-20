@@ -5,6 +5,8 @@ const GATE_IN_URL = process.env.NEXT_PUBLIC_GATE_IN_URL ?? "http://localhost:800
 const GATE_OUT_URL = process.env.NEXT_PUBLIC_GATE_OUT_URL ?? "http://localhost:8001";
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
+  
   turbopack: {
     root: __dirname,
   },

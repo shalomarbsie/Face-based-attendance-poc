@@ -4,10 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EventBadge } from "@/components/EventBadge";
 import { Camera, Wifi, WifiOff, AlertCircle } from "lucide-react";
+import { listCameras } from "@/lib/api";
 import type { EventType } from "@/lib/types";
 
-const API_BASE = "";
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface CameraConfig {
+  id: string;
+  name: string;
+  direction: string;
+}
 
 interface DetectionResult {
   event_type: EventType;
@@ -16,43 +22,76 @@ interface DetectionResult {
   id: string;
 }
 
+type WsStatus = "connecting" | "connected" | "disconnected" | "error";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function formatConfidence(c: number | null): string {
   if (c == null) return "";
   return `${Math.round(c * 100)}%`;
 }
 
+function wsUrlForCamera(cam: CameraConfig): string {
+  const base =
+    cam.direction === "out"
+      ? (process.env.NEXT_PUBLIC_GATE_OUT_WS_URL ?? "ws://localhost:8001")
+      : (process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000");
+  return `${base}/ws/camera/${cam.id}/stream`;
+}
+
+const EVENT_COLOR: Record<EventType, string> = {
+  clock_in:  "var(--clock-in)",
+  clock_out: "var(--clock-out)",
+  duplicate: "var(--duplicate)",
+  ignored:   "var(--ignored)",
+  unknown:   "var(--unknown)",
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function CameraPage() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Camera list loaded from DB
+  const [cameras, setCameras]       = useState<CameraConfig[]>([]);
+  const [activeIdx, setActiveIdx]   = useState(0);
+  const [loadError, setLoadError]   = useState<string | null>(null);
 
-  const [cameraId, setCameraId] = useState<string | null>(null);
-  const [cameraName, setCameraName] = useState("Camera");
-  const [cameraDirection, setCameraDirection] = useState("");
+  // Webcam
+  const videoRef        = useRef<HTMLVideoElement>(null);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
   const [streamActive, setStreamActive] = useState(false);
-  const [wsStatus, setWsStatus] = useState<"connecting" | "connected" | "disconnected" | "error">(
-    "disconnected",
-  );
-  const [detections, setDetections] = useState<DetectionResult[]>([]);
-  const [lastEvent, setLastEvent] = useState<DetectionResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [streamError,  setStreamError]  = useState<string | null>(null);
 
-  // Fetch camera config
+  // WebSocket — one per active camera tab
+  const wsRef           = useRef<WebSocket | null>(null);
+  const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [wsStatus,  setWsStatus]  = useState<WsStatus>("disconnected");
+
+  // Per-camera detection logs keyed by camera ID
+  const [logsByCamera, setLogsByCamera]   = useState<Record<string, DetectionResult[]>>({});
+  const [lastByCamera, setLastByCamera]   = useState<Record<string, DetectionResult | null>>({});
+
+  const activeCamera  = cameras[activeIdx] ?? null;
+  const detections    = activeCamera ? (logsByCamera[activeCamera.id] ?? []) : [];
+  const lastEvent     = activeCamera ? (lastByCamera[activeCamera.id] ?? null) : null;
+
+  // ── Load camera list from DB ──────────────────────────────────────────────
+
   useEffect(() => {
-    fetch(`/api/camera/current`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((cam) => {
-        setCameraId(cam.id);
-        setCameraName(cam.name);
-        setCameraDirection(cam.direction);
+    listCameras()
+      .then((cams) => {
+        // Sort so "in" tab always comes first
+        const sorted = [...cams].sort((a, b) =>
+          a.direction === "in" ? -1 : b.direction === "in" ? 1 : 0
+        );
+        setCameras(sorted);
       })
-      .catch(() => setError("Could not load camera configuration."));
+      .catch(() => setLoadError("Could not load camera list."));
   }, []);
 
-  // Start webcam
+  // ── Start webcam once (shared across tabs) ────────────────────────────────
+
   useEffect(() => {
-    if (!cameraId) return;
+    if (cameras.length === 0) return;
     navigator.mediaDevices
       .getUserMedia({ video: { width: 1280, height: 720 } })
       .then((stream) => {
@@ -61,33 +100,31 @@ export default function CameraPage() {
           setStreamActive(true);
         }
       })
-      .catch(() => setError("Could not access webcam. Check browser permissions."));
+      .catch(() => setStreamError("Could not access webcam. Check browser permissions."));
     return () => {
       if (videoRef.current?.srcObject) {
         const s = videoRef.current.srcObject as MediaStream;
         s.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [cameraId]);
+  }, [cameras.length]);
 
-  // Connect WebSocket and start sending frames
-  const connectWS = useCallback(() => {
-    if (!cameraId || !streamActive) return;
+  // ── WebSocket connection ──────────────────────────────────────────────────
 
+  const connectWS = useCallback((cam: CameraConfig) => {
     setWsStatus("connecting");
-
-    const ws = new WebSocket(`${WS_BASE}/ws/camera/${cameraId}/stream`);
+    const url = wsUrlForCamera(cam);
+    const ws  = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setWsStatus("connected");
-      // Send frames at ~5 fps
       frameIntervalRef.current = setInterval(() => {
         if (ws.readyState !== WebSocket.OPEN) return;
         const canvas = canvasRef.current;
-        const video = videoRef.current;
-        if (!canvas || !video) return;
-        canvas.width = video.videoWidth;
+        const video  = videoRef.current;
+        if (!canvas || !video || !video.videoWidth) return;
+        canvas.width  = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -105,17 +142,22 @@ export default function CameraPage() {
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.events) {
+        if (data.events?.length) {
           const mapped: DetectionResult[] = data.events.map(
             (ev: { event_type: string; employee: string; confidence: number | null }, i: number) => ({
-              id: `${Date.now()}-${i}`,
+              id:         `${Date.now()}-${i}`,
               event_type: ev.event_type as EventType,
-              employee: ev.employee,
+              employee:   ev.employee,
               confidence: ev.confidence,
             }),
           );
-          setLastEvent(mapped[0] ?? null);
-          setDetections((prev) => [...mapped, ...prev].slice(0, 20));
+          // Store results under this camera's ID so switching tabs
+          // shows the correct log for each gate
+          setLogsByCamera((prev) => ({
+            ...prev,
+            [cam.id]: [...mapped, ...(prev[cam.id] ?? [])].slice(0, 20),
+          }));
+          setLastByCamera((prev) => ({ ...prev, [cam.id]: mapped[0] ?? null }));
         }
       } catch {
         // ignore parse errors
@@ -125,73 +167,92 @@ export default function CameraPage() {
     ws.onerror = () => setWsStatus("error");
     ws.onclose = () => {
       setWsStatus("disconnected");
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-    };
-  }, [cameraId, streamActive]);
-
-  function disconnectWS() {
-    if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-    wsRef.current?.close();
-    setWsStatus("disconnected");
-    setLastEvent(null);
-  }
-
-  // Auto-connect when camera is ready — replace the manual connect button
-  useEffect(() => {
-    if (!cameraId || !streamActive) return;
-
-    // Close any existing connection before opening a new one
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    connectWS();
-
-    return () => {
       if (frameIntervalRef.current) {
         clearInterval(frameIntervalRef.current);
         frameIntervalRef.current = null;
       }
-      wsRef.current?.close();
-      wsRef.current = null;
     };
-  }, [cameraId, streamActive, connectWS]);
+  }, []);
 
-  const eventColor: Record<EventType, string> = {
-    clock_in: "var(--clock-in)",
-    clock_out: "var(--clock-out)",
-    duplicate: "var(--duplicate)",
-    ignored: "var(--ignored)",
-    unknown: "var(--unknown)",
-  };
+  function disconnectWS() {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    wsRef.current?.close();
+    wsRef.current = null;
+    setWsStatus("disconnected");
+  }
+
+  // Auto-connect whenever active camera or stream readiness changes
+  useEffect(() => {
+    if (!activeCamera || !streamActive) return;
+
+    // Close previous connection before opening new one
+    disconnectWS();
+    connectWS(activeCamera);
+
+    return () => {
+      disconnectWS();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCamera?.id, streamActive]);
+
+  // ── Tab switch handler ────────────────────────────────────────────────────
+
+  function handleTabSwitch(idx: number) {
+    if (idx === activeIdx) return;
+    disconnectWS();
+    setActiveIdx(idx);
+    // connectWS fires via the useEffect above when activeCamera.id changes
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const error = loadError ?? streamError;
 
   return (
     <AppShell>
       <div className="p-6 max-w-[1200px] mx-auto space-y-5">
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-foreground tracking-tight">
-              {cameraName}
-            </h1>
-            <p className="text-sm text-muted-foreground capitalize mt-0.5">
-              Direction: {cameraDirection || "—"}
+            <h1 className="text-lg font-semibold text-foreground tracking-tight">Camera</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Live face recognition stream
             </p>
           </div>
-
-          <div className="flex items-center gap-3">
-            {/* WS status */}
-            <div className="flex items-center gap-1.5">
-              {wsStatus === "connected" ? (
-                <Wifi className="w-4 h-4 text-[var(--clock-in)]" />
-              ) : (
-                <WifiOff className="w-4 h-4 text-muted-foreground" />
-              )}
-              <span className="text-xs text-muted-foreground capitalize">{wsStatus}</span>
-            </div>
+          <div className="flex items-center gap-1.5">
+            {wsStatus === "connected" ? (
+              <Wifi className="w-4 h-4 text-[var(--clock-in)]" />
+            ) : wsStatus === "connecting" ? (
+              <div className="w-4 h-4 rounded-full border-2 border-foreground/20 border-t-foreground animate-spin" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-muted-foreground" />
+            )}
+            <span className="text-xs text-muted-foreground capitalize">{wsStatus}</span>
           </div>
         </div>
+
+        {/* Camera tabs */}
+        {cameras.length > 0 && (
+          <div className="flex items-center gap-1 bg-secondary border border-border rounded-lg p-1 w-fit">
+            {cameras.map((cam, idx) => (
+              <button
+                key={cam.id}
+                onClick={() => handleTabSwitch(idx)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+                  activeIdx === idx
+                    ? "bg-card text-foreground border border-border shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {cam.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 bg-[var(--unknown-bg)] text-[var(--unknown)] border border-[var(--unknown)]/20 rounded-lg px-4 py-3 text-sm">
@@ -210,26 +271,20 @@ export default function CameraPage() {
               </div>
             )}
 
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
 
-            {/* Overlay: last event toast */}
+            {/* Last event overlay */}
             {lastEvent && wsStatus === "connected" && (
               <div
                 className="absolute top-4 left-4 right-4 flex items-center gap-3 rounded-lg px-4 py-3 border backdrop-blur-sm"
                 style={{
-                  background: `color-mix(in srgb, ${eventColor[lastEvent.event_type]} 8%, transparent)`,
-                  borderColor: `${eventColor[lastEvent.event_type]}30`,
+                  background:   `color-mix(in srgb, ${EVENT_COLOR[lastEvent.event_type]} 8%, transparent)`,
+                  borderColor:  `${EVENT_COLOR[lastEvent.event_type]}30`,
                 }}
               >
                 <div
                   className="w-2 h-2 rounded-full shrink-0 animate-pulse"
-                  style={{ background: eventColor[lastEvent.event_type] }}
+                  style={{ background: EVENT_COLOR[lastEvent.event_type] }}
                 />
                 <span className="text-sm font-medium text-foreground">{lastEvent.employee}</span>
                 <EventBadge type={lastEvent.event_type} />
@@ -250,12 +305,28 @@ export default function CameraPage() {
                 </span>
               </div>
             )}
+
+            {/* Active camera label */}
+            {activeCamera && wsStatus === "connected" && (
+              <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-background/70 backdrop-blur-sm rounded px-2 py-1">
+                <span className="text-[10px] font-medium text-muted-foreground capitalize">
+                  {activeCamera.direction === "in" ? "Gate In" : "Gate Out"}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Detection log */}
+          {/* Detection log — per camera */}
           <div className="bg-card border border-border rounded-xl flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-border shrink-0">
-              <p className="text-sm font-medium text-foreground">Detection Log</p>
+              <p className="text-sm font-medium text-foreground">
+                Detection Log
+                {activeCamera && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal capitalize">
+                    — {activeCamera.name}
+                  </span>
+                )}
+              </p>
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-thin divide-y divide-border">
               {detections.length === 0 ? (
@@ -284,7 +355,7 @@ export default function CameraPage() {
           </div>
         </div>
 
-        {/* Hidden canvas for frame capture */}
+        {/* Hidden canvas */}
         <canvas ref={canvasRef} className="hidden" />
       </div>
     </AppShell>
