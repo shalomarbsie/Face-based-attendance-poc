@@ -107,6 +107,40 @@ Outgoing camera/admin: http://localhost:8001
 
 Both services share the same Postgres database but use different `CAMERA_ID` values.
 
+**Reloading `.env` changes:** `docker compose up -d` does not detect edits to the contents of
+`.env` — it only recreates containers when `docker-compose.yml` itself changes. After changing
+any `SAMPLE_EVERY_N`, `DET_SIZE`, or other tuning value in `.env`, force a real reload:
+
+```bash
+docker compose up -d --force-recreate office-gate-in office-gate-out
+```
+
+**Real-time logs:** the image sets `PYTHONUNBUFFERED=1` so `print()`-based debug logs
+(`[timing]`, `[spoof]`, `[patch]`, etc.) stream to `docker compose logs -f` immediately instead
+of sitting in Python's block-buffer until it fills.
+
+## Recognition Pipeline Tuning
+
+Each frame goes through: face detection (every frame) → centroid tracking (every frame) →
+anti-spoof + embedding (only on sampled frames) → temporal majority vote → commit.
+
+Key environment variables (set in `.env`, take effect after `--force-recreate`):
+
+| Variable | Default | Current | Effect |
+|---|---|---|---|
+| `SAMPLE_EVERY_N` | 15 | **2** | How often (in matched frames) a track runs anti-spoof + embedding. Lower = faster verdicts, more CPU spent per track. |
+| `DET_SIZE` | 320 | **256** | Face detector input resolution. Lower = faster detection, slightly reduced range/accuracy. |
+| `INTRA_OP_NUM_THREADS` | 3 | — | ONNXRuntime intra-op CPU parallelism for inference. |
+| `INTER_OP_NUM_THREADS` | 1 | — | ONNXRuntime inter-op CPU parallelism. |
+| `STREAM_EXECUTOR_WORKERS` | 2 | — | Thread pool size for offloading per-frame inference off the async event loop. |
+| `SPOOF_THRESHOLD` | 0.6 | — | Liveness score cutoff; a rejected sample delays voting but doesn't invalidate the track. |
+
+`CentroidTracker.get_majority_verdict` also requires a minimum of 3 votes (`min_votes`) in the
+buffer, holding at least 30% majority, before it returns a verdict. Check `[timing]` logs
+(`LOG_FRAME_TIMING=1`) to see actual per-frame ms and how many samples a track needed before its
+`events=1` line — that's the fastest way to tell whether detection speed or vote requirements are
+the current bottleneck.
+
 ## Pages
 
 - `/`: owner/HR login.

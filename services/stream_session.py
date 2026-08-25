@@ -18,6 +18,7 @@ class StreamSession:
             sample_every_n=settings.sample_every_n,
             max_vote_buffer=10,
             max_active_tracks=settings.max_active_tracks,
+            min_votes=3,
         )
         self.spoof_svc = SpoofService()
         self.spoof_counts: dict[int, int] = {}

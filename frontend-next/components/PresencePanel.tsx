@@ -44,12 +44,13 @@ export function PresencePanel() {
         const today = new Date().toISOString().slice(0, 10);
         const present = data
           .filter((r) => r.work_date === today && r.clock_in_at && !r.clock_out_at)
-          .map((r) => ({
-            id: r.employee_id,
-            full_name: r.full_name,
-            clock_in_at: r.clock_in_at,
-          }));
-        setEmployees(present);
+          .reduce((acc, r) => {
+            if (!acc.has(r.employee_id)) {
+              acc.set(r.employee_id, { id: r.employee_id, full_name: r.full_name, clock_in_at: r.clock_in_at });
+            }
+            return acc;
+          }, new Map<string, PresentEmployee>());
+        setEmployees([...present.values()]);
       } catch {
         // ignore
       } finally {

@@ -14,11 +14,13 @@ class Track:
 
 class CentroidTracker:
     def __init__(self, max_disappeared: int = 10, sample_every_n: int = 15,
-                 max_vote_buffer: int = 10, max_active_tracks: int = 3):
+                 max_vote_buffer: int = 10, max_active_tracks: int = 3,
+                 min_votes: int = 3):
         self.max_disappeared = max_disappeared
         self.sample_every_n = sample_every_n
         self.max_vote_buffer = max_vote_buffer
         self.max_active_tracks = max_active_tracks
+        self.min_votes = min_votes
         self._next_id = 0
         self.tracks: dict[int, Track] = {}
 
@@ -83,12 +85,10 @@ class CentroidTracker:
         return self.tracks
 
     def should_sample(self, track_id: int) -> bool:
-        """True when this track is due for an anti-spoof + embedding call."""
         track = self.tracks.get(track_id)
         if track is None or track.committed or track.frames_since_seen > 0:
             return False
-        # sample_counter starts at 0; first sample fires on frame 1
-        return track.sample_counter % self.sample_every_n == 1
+        return track.sample_counter % self.sample_every_n == 0
 
     def record_vote(self, track_id: int, employee_id: str | None, confidence: float):
         track = self.tracks.get(track_id)
@@ -100,11 +100,11 @@ class CentroidTracker:
 
     def get_majority_verdict(self, track_id: int) -> tuple[str | None, float] | None:
         """
-        Returns (employee_id, avg_confidence) once the buffer has at least 5
-        votes and one candidate holds 60%+ of them. Returns None otherwise.
+        Returns (employee_id, avg_confidence) once the buffer has at least 3
+        votes and one candidate holds 34%+ of them. Returns None otherwise.
         """
         track = self.tracks.get(track_id)
-        if track is None or len(track.vote_buffer) < 5:
+        if track is None or len(track.vote_buffer) < self.min_votes:
             return None
         votes = [v[0] for v in track.vote_buffer]
         top_id, top_count = Counter(votes).most_common(1)[0]
